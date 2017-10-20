@@ -29,13 +29,14 @@
 .alias initial_scanlines 1
 .alias most_scanlines 31
 .alias max_scanlines 41
-.alias max_palette_lines_value 129
+
+.alias max_palette_lines_value 149
 .alias max_palette_lines_min 41
-.alias visible_palette_lines_value 100
+.alias visible_palette_lines_value 80
 .alias visible_palette_lines_max 188
 .alias initial_scroll_offset 0
-.alias initial_palette_offset 3
-;.alias end_scroll_offset 200           ; defined in the code-*.oph files
+.alias initial_palette_offset 23
+.alias end_scroll_offset 200
 
 .alias screen_low $76
 .alias screen_high $77
@@ -50,20 +51,9 @@
 .alias animation_value0 $84
 .alias animation_value1 $85
 
-; Cycle a full range of palette colours (3 lines per colour, 6 colours,
-; 2 cycles -> 36 lines, with one extra that doesn't seem to mess up the flow).
-;.alias title_palette_start [128 + 68]  ; defined in the code-*.oph files
-;.alias title_palette_finish [128 + 105]; defined in the code-*.oph files
 .alias palette_fe08 $2e00
 .alias palette_fe09 $2f00
 .alias title_dest_address $2e00
-;.alias title_dest_end $5800            ; defined in the code-*.oph files
-
-.alias end_scroll_offset 200
-.alias title_dest_end $5800
-
-.alias title_palette_start [128 + 3]
-.alias title_palette_finish [128 + 34]
 
 main_code:
 
@@ -180,7 +170,7 @@ main_loop:
     tax
     jsr wait_scanlines
 
-    ldx text_lines
+    ldx text_lines          ; Wait/block for text_lines scanlines.
     jsr wait_scanlines      ; Comment for use with Elkulator.
     ;jsr block_scanlines    ; Uncomment for use with Elkulator.
 
@@ -192,7 +182,7 @@ main_loop:
     cpx #0
     beq show_palette
 
-    jsr block_scanlines
+    jsr block_scanlines     ; Blank the display for palette_lines scanlines.
 
     show_palette:
 
@@ -202,7 +192,7 @@ main_loop:
     cmp #most_scanlines
     bne no_palette_correction
 
-    dex
+        dex                     ; Correct jitter for one scrolling offset.
 
     no_palette_correction:
 
@@ -301,8 +291,8 @@ main_loop:
     lda max_palette_lines           ; Normally the number of lines to blank
     cmp #max_palette_lines_min      ; would be fixed, but we start with a
     beq calculate_remaining_lines2  ; higher than required value to hide the
-    sec                             ; title image.
-    sbc #2
+    sec                             ; wrapped around title image as it scrolls
+    sbc #2                          ; off the screen.
     sta max_palette_lines
 
     calculate_remaining_lines2:
@@ -312,16 +302,19 @@ main_loop:
 
     lda visible_palette_lines
     cmp #visible_palette_lines_max
-    bne add_visible_lines
+    beq scroll_palette
 
-    inc palette_offset  ; Only increase the palette offset once the full
-    inc palette_offset  ; scrolling area is visible. This is designed to
-    jmp check_keys      ; occur when the top of the visible area has stopped
-                        ; moving.
-    add_visible_lines:
     adc #2
     sta visible_palette_lines
+    jmp check_keys
 
+    scroll_palette:                 ; Update the palette offset
+    inc palette_offset  ; Only increase the palette offset once the full
+    inc palette_offset  ; scrolling area is visible. This is designed to
+                        ; occur when the top of the visible area has stopped
+                        ; moving. After this point the top of the "screen"
+                        ; slides behind the blanked mode change region at the
+                        ; top of the display.
     check_keys:
 
     lda #121

@@ -96,6 +96,12 @@ def read_sprite(lines):
 
 rainbow_colours = [red, yellow, green, cyan, blue, magenta]
 
+standard_colours = {
+    "black": (0, 0, 0), "red": (255, 0, 0), "green": (0, 255, 0),
+    "yellow": (255, 255, 0), "blue": (0, 0, 255), "magenta": (255, 0, 255),
+    "cyan": (0, 255, 255), "white": (255, 255, 255)
+    }
+
 def rainbow(i, colours, s):
 
     # Each physical colour is used in two adjacent rows.
@@ -126,7 +132,7 @@ def title_palette(spans, default, full = True):
     
         for (s1, s2), fn in spans:
         
-            if i >= 128 + s1 and i < 128 + s2:
+            if i >= s1 and i < s2:
                 fe08, fe09 = fn(i)
                 break
         else:
@@ -148,18 +154,54 @@ def read_menu_cfg(file_name):
     
     info = []
     
-    for line in lines:
+    i = 0
+    while i < len(lines):
     
-        l = line.strip()
+        line = lines[i]
+        i += 1
         
-        if l:
-            pieces = l.split()
-            page = int(pieces[0])
-            command = pieces[1]
-            files = pieces[2:]
-            info.append((page, command, files))
+        l = line.strip()
+        if not l:
+            break
+        
+        pieces = l.split()
+        page = int(pieces[0])
+        command = pieces[1]
+        files = pieces[2:]
+        info.append((page, command, files))
     
-    return info
+    # Read the spans.
+    i += 1
+    spans = []
+    
+    while i < len(lines):
+    
+        line = lines[i]
+        i += 1
+        
+        l = line.strip()
+        if not l:
+            break
+        
+        pieces = l.split()
+        begin = int(pieces[0])
+        end = int(pieces[1])
+        
+        if pieces[2] == "rainbow":
+            spans.append(((begin, end), lambda i: get_entries(4, rainbow(i, rainbow_colours, 3))))
+        
+        elif len(pieces) == 6:
+            colours = []
+            for c in pieces[2:]:
+                colours.append(standard_colours[c])
+            
+            spans.append(((begin, end), lambda i: get_entries(4, colours)))
+        
+        else:
+            sys.stderr.write("Invalid palette description '%s' in %s.\n" % (l, file_name))
+            sys.exit(1)
+    
+    return info, spans
 
 
 def generate_menu(info):
@@ -200,33 +242,69 @@ def generate_menu(info):
     for i in range(len(info)):
         s += ".byte [game%i - boot_command_text]\n" % (i + 1)
     
-    print s
     return s
+
+def show_rom_order(info):
+
+    low = [None] * 4
+    low[0] = "title.rom"
+    high = [None] * 4
+    
+    for page, command, files in info:
+    
+        if len(files) == 2:
+            low[page] = files[0]
+            high[page] = files[1]
+        elif page != 0:
+            low[page] = high[page] = files[0]
+        else:
+            high[page] = files[0]
+    
+    low = map(str, low)
+    high = map(str, high)
+    
+    print
+    print "# To make separate ROM sets for Elkulator:"
+    print "cat " + " ".join(low) + " > roms1"
+    print "cat " + " ".join(high) + " > roms2"
+    print
+    print "# ROM order for flashing:"
+    i = 0
+    for r1, r2 in zip(low, high):
+        print "%x %s" % (i, r1)
+        print "%x %s" % (i + 0x4000, r2)
+        i += 0x8000
+    print
 
 
 if __name__ == "__main__":
 
-    if len(sys.argv) != 2:
+    if len(sys.argv) != 3:
     
-        sys.stderr.write("Usage: %s <menu configuration file>\n" % sys.argv[0])
+        sys.stderr.write("Usage: %s <menu configuration file> <title image>\n" % sys.argv[0])
         sys.exit(1)
     
     menu_cfg_file = sys.argv[1]
+    title_image_file = sys.argv[2]
     
     # Special title image and code processing
-    spans = [((4, 34), lambda i: get_entries(4, rainbow(i, rainbow_colours, 3)))]
-    default = lambda i: get_entries(4, [black, red, yellow, green])
+    menu_info, spans = read_menu_cfg(menu_cfg_file)
+    default = lambda i: get_entries(4, [black, red, yellow, white])
     
     # Convert the PNG to screen data and compress it with the palette data.
-    title_sprite = read_sprite(read_png("images/title.png"))
+    title_sprite = read_sprite(read_png(title_image_file))
     fe08_data, fe09_data = title_palette(spans, default, full = True)
     data_list = "".join(map(chr, compress(fe08_data + fe09_data + map(ord, title_sprite))))
     
     # Prepend the menu data to a generated file.
-    menu_info = read_menu_cfg(menu_cfg_file)
     code_temp = generate_menu(menu_info)
     
     # Read the code and append the formatted title data to it.
+    title_dest_end = 0x2e00 + len(title_sprite) + len(fe08_data) + len(fe09_data)
+    code_temp += ".alias title_dest_end $%x\n" % title_dest_end
+    code_temp += ".alias title_palette_start %i\n" % spans[0][0][0]
+    code_temp += ".alias title_palette_finish %i\n\n" % spans[0][0][1]
+
     code_temp += open("asm/code.oph").read()
     code_temp += "\n" + "title_data:\n" + format_data(data_list)
     
@@ -274,6 +352,8 @@ if __name__ == "__main__":
     
     for name in remove:
         os.remove(name)
+    
+    show_rom_order(menu_info)
     
     # Exit
     sys.exit()
