@@ -13,18 +13,13 @@
 ; You should have received a copy of the GNU General Public License
 ; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-boot_code:
+.alias boot_code_addr $1900
+.alias bank_number_addr $193f
+.alias boot_text_addr $1940
+.alias boot_temp_low $70
+.alias boot_temp_high $71
 
-lda bank_number_addr
-sta $fc73                   ; change the ROM page
-
-ldx #<boot_text_addr
-ldy #>boot_text_addr
-jsr $fff7                   ; run the appropriate command
-
-jmp ($fffc)
-
-copy_boot_command:  ; $70=bank number
+copy_boot_command:  ; $70=menu choice - 1
 
 ldx $70
 lda bank_numbers,x
@@ -61,7 +56,28 @@ copy_boot_code_loop:
     lda boot_code,x
     sta boot_code_addr,x
     inx
-    cpx #[copy_boot_command - boot_code]
+    cpx #[boot_code_end - boot_code]
     bne copy_boot_code_loop
 
 jmp boot_code_addr
+
+; This boot code is copied into RAM then run because it needs to change the ROM
+; page and this would cause the code to be paged out while executing if it was
+; run from ROM.
+
+boot_code:
+
+lda bank_number_addr
+sta $fc73                   ; change the ROM page
+
+lda boot_text_addr          ; if there is no boot command then just reboot
+beq reboot
+
+ldx #<boot_text_addr
+ldy #>boot_text_addr
+jsr $fff7                   ; run the appropriate command
+
+reboot:
+jmp ($fffc)
+
+boot_code_end:

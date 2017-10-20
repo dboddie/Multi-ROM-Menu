@@ -139,12 +139,79 @@ def title_palette(spans, default, full = True):
     return fe08_data, fe09_data
 
 
+def read_menu_cfg(file_name):
+
+    lines = open(file_name).readlines()
+    
+    # Discard the headings.
+    lines.pop(0)
+    
+    info = []
+    
+    for line in lines:
+    
+        l = line.strip()
+        
+        if l:
+            pieces = l.split()
+            page = int(pieces[0])
+            command = pieces[1]
+            files = pieces[2:]
+            info.append((page, command, files))
+    
+    return info
+
+
+def generate_menu(info):
+
+    s = ""
+    
+    key_codes = [0x30, 0x31, 0x11, 0x12, 0x13, 0x34, 0x24, 0x15, 0x26]
+    
+    s += "key_codes:\n"
+    s += ".byte " + ",".join(map(lambda x: "$%x" % x, key_codes[:len(info)]))
+    s += "\nkey_codes_end:\n\n"
+
+    s += "bank_numbers:   ; These specify the banks occupied by the menu choices:\n"
+    
+    for page, command, files in info:
+        s += ".byte %i\n" % page
+    
+    s += "\nboot_command_text:\n\n"
+    
+    i = 1
+    
+    for page, command, files in info:
+    
+        s += "game%i:\n" % i
+        
+        if command != "-":
+            if page == 0:
+                s += '.byte "%s", 13\n' % command
+            else:
+                s += '.byte "KEY 10 *%s|M", 13\n' % command
+        else:
+            s += '.byte 0\n'
+        
+        i += 1
+    
+    s += "\ncommand_names:\n"
+    
+    for i in range(len(info)):
+        s += ".byte [game%i - boot_command_text]\n" % (i + 1)
+    
+    print s
+    return s
+
+
 if __name__ == "__main__":
 
-    if len(sys.argv) != 1:
+    if len(sys.argv) != 2:
     
-        sys.stderr.write("Usage: %s\n" % sys.argv[0])
+        sys.stderr.write("Usage: %s <menu configuration file>\n" % sys.argv[0])
         sys.exit(1)
+    
+    menu_cfg_file = sys.argv[1]
     
     # Special title image and code processing
     spans = [((4, 34), lambda i: get_entries(4, rainbow(i, rainbow_colours, 3)))]
@@ -155,8 +222,12 @@ if __name__ == "__main__":
     fe08_data, fe09_data = title_palette(spans, default, full = True)
     data_list = "".join(map(chr, compress(fe08_data + fe09_data + map(ord, title_sprite))))
     
+    # Prepend the menu data to a generated file.
+    menu_info = read_menu_cfg(menu_cfg_file)
+    code_temp = generate_menu(menu_info)
+    
     # Read the code and append the formatted title data to it.
-    code_temp = open("asm/code.oph").read()
+    code_temp += open("asm/code.oph").read()
     code_temp += "\n" + "title_data:\n" + format_data(data_list)
     
     # Write "temporary" files containing the code and compressed title data.

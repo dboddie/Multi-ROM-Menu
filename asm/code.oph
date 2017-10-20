@@ -62,6 +62,9 @@
 .alias end_scroll_offset 200
 .alias title_dest_end $5800
 
+.alias title_palette_start [128 + 3]
+.alias title_palette_finish [128 + 34]
+
 main_code:
 
     ;lda #$fd
@@ -325,10 +328,17 @@ main_loop:
     ldx #0
     jsr $fff4
 
-    cpx #first_bank_key
-    bcc next_frame
-    cpx #after_last_bank_key
-    bcc end_loop            ; if first_bank_key <= X <= last_bank_key then break
+    cpx #$ff
+    beq next_frame
+
+    txa
+    ldx #[key_codes_end - key_codes - 1]
+
+    check_keys_loop:
+        cmp key_codes,x
+        beq end_loop
+        dex
+        bpl check_keys_loop
 
     next_frame:
 
@@ -353,12 +363,7 @@ end_loop:
 
     cli
 
-    sec
-    txa
-    sbc #48             ; X = X - 48
-    clc
-
-    sta $70
+    stx $70
 
     ; Exit to MODE 6.
     ;lda #22
@@ -519,4 +524,3 @@ text:
 text_end:
 
 .include "boot-code.oph"
-.include "menu-data.oph"
