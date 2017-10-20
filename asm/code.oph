@@ -60,8 +60,6 @@
 ;.alias title_dest_end $5800            ; defined in the code-*.oph files
 
 .alias end_scroll_offset 200
-.alias title_palette_start [128 + 4]
-.alias title_palette_finish [128 + 34]
 .alias title_dest_end $5800
 
 main_code:
@@ -520,4 +518,5 @@ text:
 .byte 22,1, 23,1,0,0,0,0,0,0,0,0
 text_end:
 
+.include "boot-code.oph"
 .include "menu-data.oph"

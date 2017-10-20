@@ -113,7 +113,7 @@ def format_data(data):
     
     return s
 
-def title_palette(full = True):
+def title_palette(spans, default, full = True):
 
     # Special title palette processing
     
@@ -121,16 +121,17 @@ def title_palette(full = True):
     fe09_data = []
     
     blank = get_entries(4, [black, black, black, black])
-    standard = get_entries(4, [black, red, yellow, green])
-    
-    s1, s2 = 4, 34
     
     for i in range(256):
     
-        if i >= 128 + s1 and i < 128 + s2:
-            fe08, fe09 = get_entries(4, rainbow(i, rainbow_colours, 3))
+        for (s1, s2), fn in spans:
+        
+            if i >= 128 + s1 and i < 128 + s2:
+                fe08, fe09 = fn(i)
+                break
         else:
-            fe08, fe09 = standard
+            # The last item in the list should be the fallback.
+            fe08, fe09 = default(i)
         
         fe08_data.append(fe08)
         fe09_data.append(fe09)
@@ -145,16 +146,13 @@ if __name__ == "__main__":
         sys.stderr.write("Usage: %s\n" % sys.argv[0])
         sys.exit(1)
     
-    # Memory map
-    code_start = 0x0e00
-    
-    files = []
-    
     # Special title image and code processing
+    spans = [((4, 34), lambda i: get_entries(4, rainbow(i, rainbow_colours, 3)))]
+    default = lambda i: get_entries(4, [black, red, yellow, green])
     
     # Convert the PNG to screen data and compress it with the palette data.
     title_sprite = read_sprite(read_png("images/title.png"))
-    fe08_data, fe09_data = title_palette(full = True)
+    fe08_data, fe09_data = title_palette(spans, default, full = True)
     data_list = "".join(map(chr, compress(fe08_data + fe09_data + map(ord, title_sprite))))
     
     # Read the code and append the formatted title data to it.
@@ -192,12 +190,6 @@ if __name__ == "__main__":
         title += "\x00" * padding
     
     open("title.rom", "w").write(title)
-    
-    # General ROM processing
-    
-    for src, obj in assemble:
-        if not obj.endswith(".rom"):
-            files.append((obj, code_start, code_start, code_data[obj]))
     
     # Remove the executable files.
     keep = []

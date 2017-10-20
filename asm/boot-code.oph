@@ -1,0 +1,67 @@
+; Copyright (C) 2017 David Boddie <david@boddie.org.uk>
+;
+; This program is free software: you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation, either version 3 of the License, or
+; (at your option) any later version.
+;
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+;
+; You should have received a copy of the GNU General Public License
+; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+boot_code:
+
+lda bank_number_addr
+sta $fc73                   ; change the ROM page
+
+ldx #<boot_text_addr
+ldy #>boot_text_addr
+jsr $fff7                   ; run the appropriate command
+
+jmp ($fffc)
+
+copy_boot_command:  ; $70=bank number
+
+ldx $70
+lda bank_numbers,x
+sta bank_number_addr            ; store the bank number in RAM
+
+lda command_names,x             ; load the offset of the name string
+tax
+
+lda #<boot_text_addr
+sta boot_temp_low
+lda #>boot_text_addr
+sta boot_temp_high
+
+ldy #0
+
+copy_boot_command_loop:
+
+    lda boot_command_text,x     ; copy each character from the ROM
+    sta ($70),y                 ; store the command in RAM after the bank number
+
+    cmp #13
+    beq copy_boot_command_loop_end
+
+    inx
+    iny
+    jmp copy_boot_command_loop
+
+copy_boot_command_loop_end:
+
+ldx #0
+
+copy_boot_code_loop:
+
+    lda boot_code,x
+    sta boot_code_addr,x
+    inx
+    cpx #[copy_boot_command - boot_code]
+    bne copy_boot_code_loop
+
+jmp boot_code_addr

@@ -1,3 +1,6 @@
+.alias title_palette_start [128 + 3]
+.alias title_palette_finish [128 + 34]
+
 .alias boot_code_addr $1900
 .alias bank_number_addr $193f
 .alias boot_text_addr $1940
@@ -21,56 +24,3 @@ jungle:                         ; Jungle Journey is in a different page so it
 
 command_names:
 .byte [jungle - boot_command_text], [castle - boot_command_text], 0, 0, 0, 0, 0
-
-boot_code:
-
-lda bank_number_addr
-sta $fc73                   ; change the ROM page
-
-ldx #<boot_text_addr
-ldy #>boot_text_addr
-jsr $fff7                   ; run the appropriate command
-
-jmp ($fffc)
-
-copy_boot_command:  ; $70=bank number
-
-ldx $70
-lda bank_numbers,x
-sta bank_number_addr            ; store the bank number in RAM
-
-lda command_names,x             ; load the offset of the name string
-tax
-
-lda #<boot_text_addr
-sta boot_temp_low
-lda #>boot_text_addr
-sta boot_temp_high
-
-ldy #0
-
-copy_boot_command_loop:
-
-    lda boot_command_text,x     ; copy each character from the ROM
-    sta ($70),y                 ; store the command in RAM after the bank number
-
-    cmp #13
-    beq copy_boot_command_loop_end
-
-    inx
-    iny
-    jmp copy_boot_command_loop
-
-copy_boot_command_loop_end:
-
-ldx #0
-
-copy_boot_code_loop:
-
-    lda boot_code,x
-    sta boot_code_addr,x
-    inx
-    cpx #[copy_boot_command - boot_code]
-    bne copy_boot_code_loop
-
-jmp boot_code_addr
