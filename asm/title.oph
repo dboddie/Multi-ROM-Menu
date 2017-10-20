@@ -1,0 +1,153 @@
+; Copyright (C) 2016 David Boddie <david@boddie.org.uk>
+;
+; This program is free software: you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation, either version 3 of the License, or
+; (at your option) any later version.
+;
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+;
+; You should have received a copy of the GNU General Public License
+; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+.org $8000
+
+rom_start:
+.byte 0, 0, 0
+jmp service_entry
+
+; ROM type
+.byte $82       ; 6502 code (2), language ($40), service ($80)
+
+copyright_offset:
+.byte [copyright_string - rom_start - 1]
+
+; Version
+.byte 1
+
+; Title string
+.byte "Multi-ROM games cartridge", 0
+
+; Version string
+.byte "1.0", 0
+
+copyright_string:
+.byte "(C) 2017 David Boddie", 0
+
+; Second processor relocation address
+.byte 0, $80, 0, 0
+
+service_entry:
+
+    ; Handles the boot service call.
+    cmp #3
+    bne service_entry_not_3
+    jmp main_code
+
+    service_entry_not_3:
+    cmp #4
+    bne service_entry_not_4
+    jmp service_command
+
+    service_entry_not_4:
+    cmp #9
+    beq service_help
+
+    service_entry_exit:
+    clc
+    rts
+
+show_name: .byte "MULTIROM", 13
+show_name_end:
+
+help_text:
+.byte "Type *MULTIROM to show the games menu.", 13
+help_text_end:
+
+service_help:
+
+    pha
+    tya
+    pha
+    txa
+    pha
+
+    lda ($f2),y
+    cmp #13
+    bne service_help_compare
+
+    ldx #0
+    service_help_loop0:
+        lda show_name,x
+        jsr $ffee
+        inx
+        cpx #[show_name_end - show_name]
+        bne service_help_loop0
+
+    beq service_command_claimed
+
+    service_help_compare:
+
+    ldx #0
+    service_help_loop1:
+        lda ($f2),y
+        cmp show_name,x
+        bne service_command_not_found
+        iny
+        inx
+        cmp #13
+        bne service_help_loop1
+
+    ldx #0
+    service_help_loop2:
+        lda help_text,x
+        jsr $ffee
+        inx
+        cpx #[help_text_end - help_text]
+        bne service_help_loop2
+
+service_command_claimed:
+
+    pla                         ; pop Y and X registers off the stack
+    tax
+    pla
+    tay
+    pla
+    lda #0                      ; claim service command
+    rts
+
+service_command_not_found:
+    pla                         ; pop Y and X registers off the stack
+    tax
+    pla
+    tay
+    pla
+    rts
+
+service_command:
+
+    pha
+    tya                         ; push Y and X registers onto the stack
+    pha
+    txa
+    pha
+
+    ldx #0
+    service_command_loop:
+
+        lda ($f2),y
+        cmp show_name,x
+        bne service_command_not_found
+        iny
+        inx
+        cmp #13
+        bne service_command_loop
+
+    jsr main_code
+    jmp service_command_claimed
+
+.include "dp_decode.oph"
+.include "code-temp.oph"
